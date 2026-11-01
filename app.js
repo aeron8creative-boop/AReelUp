@@ -148,19 +148,34 @@ function render() {
     audioBands: () => audio?.bands || null,
   };
   ctx.globalAlpha = 1; ctx.drawImage(frame, 0, 0);
+  usedMedia.clear();
   const ordered = active.map((fx, i) => ({ fx, i })).sort((a, b) =>
     (EFFECTS[b.fx.type].base ? 1 : 0) - (EFFECTS[a.fx.type].base ? 1 : 0) || a.i - b.i);
   for (const { fx } of ordered) {
     const def = EFFECTS[fx.type]; const lt = t - fx.start;
     const P = { ...fx.params };
-    for (const [k, d] of Object.entries(def.params)) if (d.type === 'image' || d.type === 'images') P[k] = images.get(fx.id + k) || null;
+    for (const [k, d] of Object.entries(def.params)) if (d.type === 'image' || d.type === 'images' || d.type === 'media') {
+      P[k] = images.get(fx.id + k) || null;
+      if (d.type === 'media' && P[k]?.tagName === 'VIDEO') { syncMedia(P[k], lt); usedMedia.add(P[k]); }
+    }
     ctx.save();
     try {
       def.draw({ ...env, P, lt, dur: fx.dur, p: lt / fx.dur, inK: Math.min(1, lt / .35), outK: Math.max(0, Math.min(1, (fx.dur - lt) / .3)) });
     } catch (e) { console.error(fx.type, e); }
     ctx.restore();
   }
+  for (const m of allMedia()) if (!usedMedia.has(m) && !m.paused) m.pause();
   if (settings.letterbox === 'on') { ctx.fillStyle = '#000'; const b = H * .07; ctx.fillRect(0, 0, W, b); ctx.fillRect(0, H - b, W, b); }
+}
+
+// 特效裡上傳的影片：跟著主影片同步播放
+const usedMedia = new Set();
+function allMedia() { const out = []; for (const v of images.values()) if (v?.tagName === 'VIDEO') out.push(v); return out; }
+function syncMedia(v, lt) {
+  if (v.readyState < 1 || !v.duration) return;
+  const target = lt % v.duration;
+  if (video.paused) { if (!v.paused) v.pause(); if (Math.abs(v.currentTime - target) > .05) v.currentTime = target; }
+  else { if (v.paused) v.play().catch(() => {}); if (Math.abs(v.currentTime - target) > .35) v.currentTime = target; }
 }
 
 function onSegState(s, q) {
@@ -398,6 +413,30 @@ function fieldFor(fx, k, d) {
     const pick = c => { wrap.querySelectorAll('[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c.toLowerCase() === c.toLowerCase())); set(c); };
     wrap.querySelector('.swatches').addEventListener('click', e => { const c = e.target.dataset.c; if (c) { pick(c); wrap.querySelector('input').value = c; } });
     wrap.querySelector('input').addEventListener('input', e => pick(e.target.value));
+  } else if (d.type === 'media') {
+    // 圖片或影片
+    const show = () => {
+      const cur = images.get(fx.id + k), isV = cur?.tagName === 'VIDEO';
+      wrap.innerHTML = `<label>${d.label}</label><div class="img-pick">
+        ${cur ? (isV ? `<video src="${cur.src}" muted playsinline style="width:44px;height:44px;border-radius:10px;object-fit:cover"></video>` : `<img src="${cur.src}" style="border-radius:10px">`) : '<img alt="" style="border-radius:10px">'}
+        <label class="btn ghost">${cur ? '更換' : '選擇圖片／影片'}<input type="file" accept="image/*,video/*" hidden></label>
+        ${cur ? '<button class="btn ghost" data-clear>清除</button>' : ''}</div>`;
+      wrap.querySelector('input').addEventListener('change', e => {
+        const f = e.target.files[0]; if (!f) return;
+        const url = URL.createObjectURL(f), old = images.get(fx.id + k);
+        if (old?.tagName === 'VIDEO') { old.pause(); usedMedia.delete(old); }
+        if (f.type.startsWith('video/')) {
+          const vEl = document.createElement('video'); vEl.muted = true; vEl.loop = true; vEl.playsInline = true; vEl.preload = 'auto'; vEl.src = url;
+          vEl.addEventListener('loadeddata', () => { state.segDirty = true; }, { once: true });
+          images.set(fx.id + k, vEl); show();
+        } else {
+          const im = new Image(); im.onload = () => { images.set(fx.id + k, im); show(); }; im.src = url;
+        }
+      });
+      const c = wrap.querySelector('[data-clear]');
+      if (c) c.onclick = () => { const o = images.get(fx.id + k); if (o?.tagName === 'VIDEO') o.pause(); images.delete(fx.id + k); show(); };
+    };
+    show();
   } else if (d.type === 'image') {
     const cur = images.get(fx.id + k);
     wrap.innerHTML = `<label>${d.label}</label><div class="img-pick"><img alt=""><label class="btn ghost">選擇圖片<input type="file" accept="image/*" hidden></label><button class="btn ghost" data-clear>清除</button></div>`;

@@ -79,6 +79,7 @@ const S = (label, value, options) => ({ type: 'select', label, value, options })
 const R = (label, value, min, max, step = .01) => ({ type: 'range', label, value, min, max, step });
 const IMG = (label, extra) => ({ type: 'image', label, value: null, ...extra });
 const IMGS = label => ({ type: 'images', label, value: null });
+const MEDIA = label => ({ type: 'media', label, value: null }); // 圖片或影片
 const TEXT_SW = ['#F5E27A', '#FFFFFF', '#111111', '#FF5C8A', '#D2603A', '#7C5CFF', '#4FD1C5'];
 const FONT_OPTS = [['zhSerif', '思源宋體'], ['enSans', '黑體英文'], ['wenkai', '霞鶩文楷'], ['serif', '優雅斜體'], ['display', '雜誌襯線'], ['bold', '粗黑'], ['hand', '手寫'], ['mono', '打字機'], ['sans', '黑體']];
 
@@ -681,4 +682,4 @@ export function defaultParams(type) {
 export function needsMask(fx) { const d = EFFECTS[fx.type]; return !!(d.ai && d.ai(fx.params)); }
 
 // 給其他特效模組共用
-export { clamp, easeOut, easeInOut, easeBack, lerp, rand, rr, drawCover, fitFont, lines, words, fmtNum, lum, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, IMGS };
+export { clamp, easeOut, easeInOut, easeBack, lerp, rand, rr, drawCover, fitFont, lines, words, fmtNum, lum, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, IMGS, MEDIA };

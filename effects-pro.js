@@ -3,8 +3,10 @@
 // 規格以 1080×1920 為基準，這裡用 k = W / 1080 換算，所以 720p / 1080p 都適用。
 import {
   FONTS, clamp, easeOut, easeInOut, lerp, rr, drawCover, fmtNum, blurred, shadow, noShadow,
-  T, TA, C, S, R, IMG, IMGS,
+  T, TA, C, S, R, IMG, IMGS, MEDIA,
 } from './effects.js';
+// 上傳的影片要載入完成才能畫
+const ready = m => (m && (m.tagName !== 'VIDEO' || m.readyState >= 2) ? m : null);
 
 const SANS = '"Noto Sans TC","Inter",sans-serif';
 const INTER = '"Inter","Noto Sans TC",sans-serif';
@@ -408,6 +410,7 @@ export const PRO_EFFECTS = {
       caption: T('字幕', '一百萬'),
       accent: C('重點色', '#FF9F43', ACCENTS),
       window: S('下方影片小窗', 'on', [['on', '開'], ['off', '關']]),
+      media: MEDIA('小窗內容：圖片或影片（不選就用口播畫面）'),
     },
     draw(e) {
       const { ctx, W, H, P, lt, frame } = e, k = W / 1080;
@@ -458,7 +461,7 @@ export const PRO_EFFECTS = {
         const vw = 700 * k, vh = 460 * k, vx = (W - vw) / 2, vy = 1010 * k;
         ctx.save(); ctx.globalAlpha *= e.outK; enter(ctx, lt, .3, k);
         shadow(ctx, 40 * k, 'rgba(0,0,0,.6)', 16 * k); ctx.fillStyle = '#111'; rr(ctx, vx, vy, vw, vh, 35 * k); ctx.fill(); noShadow(ctx);
-        rr(ctx, vx, vy, vw, vh, 35 * k); ctx.clip(); drawCover(ctx, frame, vx, vy, vw, vh, .5, .3); ctx.restore();
+        rr(ctx, vx, vy, vw, vh, 35 * k); ctx.clip(); const m = ready(P.media); drawCover(ctx, m || frame, vx, vy, vw, vh, .5, m ? .5 : .3); ctx.restore();
       }
     },
   },
@@ -519,4 +522,4 @@ export const PRO_EFFECTS = {
   },
 };
 
-export { enter, fitF, wrap, list, parseNum, fmtVal, tinted, coverCard, tmp, F, SANS, INTER, SERIF, ANTON, MARKER, FILTER_OK };
+export { ready, enter, fitF, wrap, list, parseNum, fmtVal, tinted, coverCard, tmp, F, SANS, INTER, SERIF, ANTON, MARKER, FILTER_OK };

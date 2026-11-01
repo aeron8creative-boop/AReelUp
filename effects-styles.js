@@ -1,7 +1,7 @@
 // ───────────────── 20 種剪輯風格 ─────────────────
 // 依照「20 個剪輯風格 Skill」規格改寫成即時 canvas 特效（基準 1080×1920，k = W/1080）。
-import { FONTS, clamp, easeOut, easeInOut, lerp, rand, rr, drawCover, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG } from './effects.js';
-import { enter, fitF, wrap, tmp, F, SANS, INTER, SERIF, MARKER } from './effects-pro.js';
+import { FONTS, clamp, easeOut, easeInOut, lerp, rand, rr, drawCover, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, MEDIA } from './effects.js';
+import { ready, enter, fitF, wrap, tmp, F, SANS, INTER, SERIF, MARKER } from './effects-pro.js';
 
 const WENKAI = FONTS.wenkai, BODONI = FONTS.bodoni, VT = FONTS.vt323;
 const ON_OFF = [['on', '開'], ['off', '關']];
@@ -510,24 +510,34 @@ export const STYLE_EFFECTS = {
     },
   },
 
-  // 19 分屏對比風
+  // 19 分屏對比風（上下或左右，兩邊都可以換成自己的圖片或影片）
   splitCompare: {
     name: '分屏對比', icon: '🌓', cat: '剪輯風格', color: '#FEB2B2', dur: 4, base: true,
     params: {
-      top: IMG('上半畫面（BEFORE；不選就用展示素材或黑白原片）'),
-      topLabel: T('上半標籤', 'BEFORE'), bottomLabel: T('下半標籤', 'AFTER'),
+      layout: S('分屏方向', 'v', [['v', '上下'], ['h', '左右']]),
+      top: MEDIA('第一格（BEFORE）：圖片或影片（不選就用展示素材或黑白原片）'),
+      bottom: MEDIA('第二格（AFTER）：圖片或影片（不選就用口播畫面）'),
+      topLabel: T('第一格標籤', 'BEFORE'), bottomLabel: T('第二格標籤', 'AFTER'),
       circle: S('紅圈標出差異', 'on', ON_OFF), cx: R('紅圈水平位置', .5, .1, .9), cy: R('紅圈垂直位置', .75, .05, .95),
     },
     draw(e) {
-      const { ctx, W, H, P, lt, frame } = e, k = W / 1080, half = H / 2;
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, half); ctx.clip();
-      const src = P.top || e.brollLive || (e.hasBroll ? e.broll(0) : null);
-      if (src) drawCover(ctx, src, 0, 0, W, half); else { ctx.drawImage(frame, 0, H * .25 - half / 2 + H * .05, W, half, 0, 0, W, half); mono(ctx, W, half); }
+      const { ctx, W, H, P, lt, frame } = e, k = W / 1080, v = P.layout !== 'h';
+      const A = v ? [0, 0, W, H / 2] : [0, 0, W / 2, H], B = v ? [0, H / 2, W, H / 2] : [W / 2, 0, W / 2, H];
+      // 第一格
+      ctx.save(); ctx.beginPath(); ctx.rect(...A); ctx.clip();
+      const src = ready(P.top) || e.brollLive || (e.hasBroll ? e.broll(0) : null);
+      if (src) drawCover(ctx, src, ...A);
+      else { drawCover(ctx, frame, ...A, .5, .35); mono(ctx, W, H); }
       ctx.restore();
-      ctx.drawImage(frame, 0, H * .18, W, half, 0, half, W, half);
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, half - 4 * k, W, 8 * k);
-      const label = (t, y, d) => { if (!t) return; ctx.save(); ctx.globalAlpha *= e.outK; enter(ctx, lt, d, k); ctx.font = F(800, 38 * k, INTER); const w = ctx.measureText(t).width + 50 * k; ctx.fillStyle = 'rgba(0,0,0,.7)'; rr(ctx, 50 * k, y, w, 70 * k, 35 * k); ctx.fill(); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(t, 75 * k, y + 36 * k); ctx.restore(); };
-      label(P.topLabel, 250 * k, 0); label(P.bottomLabel, half + 40 * k, .1);
+      // 第二格
+      ctx.save(); ctx.beginPath(); ctx.rect(...B); ctx.clip();
+      drawCover(ctx, ready(P.bottom) || frame, ...B, .5, ready(P.bottom) ? .5 : .35);
+      ctx.restore();
+      ctx.fillStyle = '#fff';
+      if (v) ctx.fillRect(0, H / 2 - 4 * k, W, 8 * k); else ctx.fillRect(W / 2 - 4 * k, 0, 8 * k, H);
+      const label = (t, x, y, d) => { if (!t) return; ctx.save(); ctx.globalAlpha *= e.outK; enter(ctx, lt, d, k); ctx.font = F(800, 38 * k, INTER); const w = ctx.measureText(t).width + 50 * k; ctx.fillStyle = 'rgba(0,0,0,.7)'; rr(ctx, x, y, w, 70 * k, 35 * k); ctx.fill(); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(t, x + 25 * k, y + 36 * k); ctx.restore(); };
+      if (v) { label(P.topLabel, 50 * k, 250 * k, 0); label(P.bottomLabel, 50 * k, H / 2 + 40 * k, .1); }
+      else { label(P.topLabel, 30 * k, 250 * k, 0); label(P.bottomLabel, W / 2 + 30 * k, 250 * k, .1); }
       if (P.circle === 'on') {
         const a = clamp((lt - .7) / .5); if (a > 0) { ctx.save(); ctx.strokeStyle = '#FF2D2D'; ctx.lineWidth = 9 * k; ctx.lineCap = 'round'; ctx.beginPath(); const x = P.cx * W, y = P.cy * H; for (let i = 0; i <= 50 * a; i++) { const an = -1 + i / 50 * (Math.PI * 2 + .4); const X = x + Math.cos(an) * 150 * k * (1 + Math.sin(i * .4) * .03), Y = y + Math.sin(an) * 100 * k; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); } ctx.stroke(); ctx.restore(); }
       }
