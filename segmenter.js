@@ -27,6 +27,9 @@ export class PersonSegmenter {
     this.mask.width = SEG_W; this.mask.height = SEG_H;
     this.maskData = new ImageData(SEG_W, SEG_H);
     this.prev = null; // 上一張遮罩（防閃爍用）
+    // 精修遮罩：放大到 2 倍再收邊，邊緣更平滑
+    this.fine = document.createElement('canvas'); this.fine.width = SEG_W * 2; this.fine.height = SEG_H * 2;
+    this.lab = new Int32Array(SEG_W * SEG_H); this.stack = new Int32Array(SEG_W * SEG_H);
     this.bbox = null;
     this.lastTs = 0;
   }
@@ -90,11 +93,59 @@ export class PersonSegmenter {
         d[i * 4 + 3] = v * 255;
         if (v > .5) { const x = i % SEG_W, y = (i / SEG_W) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
       }
+      this.removeIslands();
       this.mask.getContext('2d').putImageData(this.maskData, 0, 0);
+      this.refine();
       this.bbox = x1 < 0 ? null : { x: x0 / SEG_W * W, y: y0 / SEG_H * H, w: (x1 - x0) / SEG_W * W, h: (y1 - y0) / SEG_H * H };
       ok = true;
     });
     return ok;
+  }
+
+  // 去掉背景裡被誤判成人的小碎塊（只保留面積夠大的區塊）
+  removeIslands() {
+    const d = this.maskData.data, lab = this.lab.fill(0), st = this.stack, n = SEG_W * SEG_H, areas = [0];
+    for (let i = 0; i < n; i++) {
+      if (lab[i] || d[i * 4 + 3] < 128) continue;
+      const id = areas.length; let top = 0, area = 0; st[top++] = i; lab[i] = id;
+      while (top) {
+        const p = st[--top]; area++;
+        const x = p % SEG_W, y = (p / SEG_W) | 0;
+        if (x > 0 && !lab[p - 1] && d[(p - 1) * 4 + 3] >= 128) { lab[p - 1] = id; st[top++] = p - 1; }
+        if (x < SEG_W - 1 && !lab[p + 1] && d[(p + 1) * 4 + 3] >= 128) { lab[p + 1] = id; st[top++] = p + 1; }
+        if (y > 0 && !lab[p - SEG_W] && d[(p - SEG_W) * 4 + 3] >= 128) { lab[p - SEG_W] = id; st[top++] = p - SEG_W; }
+        if (y < SEG_H - 1 && !lab[p + SEG_W] && d[(p + SEG_W) * 4 + 3] >= 128) { lab[p + SEG_W] = id; st[top++] = p + SEG_W; }
+      }
+      areas.push(area);
+    }
+    if (areas.length <= 2) return;
+    const big = Math.max(...areas), keep = areas.map(a => a >= big * .12); // 兩個人以上也保留
+    for (let i = 0; i < n; i++) {
+      const id = lab[i];
+      if (id ? !keep[id] : d[i * 4 + 3] > 0 && d[i * 4 + 3] < 128 && !this.nearKept(i, lab, keep)) d[i * 4 + 3] = 0;
+    }
+  }
+  nearKept(i, lab, keep) {
+    const x = i % SEG_W, y = (i / SEG_W) | 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= SEG_W || yy >= SEG_H) continue;
+      const id = lab[yy * SEG_W + xx]; if (id && keep[id]) return true;
+    }
+    return false;
+  }
+
+  // 放大 2 倍（平滑內插）後再收邊 → 邊緣圓順、不會一格一格
+  refine() {
+    const c = this.fine.getContext('2d', { willReadFrequently: true }), w = this.fine.width, h = this.fine.height;
+    c.clearRect(0, 0, w, h); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.drawImage(this.mask, 0, 0, w, h);
+    const img = c.getImageData(0, 0, w, h), d = img.data;
+    const band = Math.max(.06, Math.min(.45, this.opts.soft * .9)), lo = .5 - band / 2;
+    for (let i = 3; i < d.length; i += 4) {
+      let v = (d[i] / 255 - lo) / band; v = v < 0 ? 0 : v > 1 ? 1 : v * v * (3 - 2 * v);
+      d[i] = v * 255;
+    }
+    c.putImageData(img, 0, 0);
   }
 
   // 把遮罩套到畫面上，得到去背人像
@@ -104,7 +155,7 @@ export class PersonSegmenter {
     c.drawImage(frame, 0, 0);
     c.globalCompositeOperation = 'destination-in';
     c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-    c.drawImage(this.mask, 0, 0, out.width, out.height);
+    c.drawImage(this.fine, 0, 0, out.width, out.height);
     c.globalCompositeOperation = 'source-over';
     return out;
   }

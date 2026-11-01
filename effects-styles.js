@@ -24,7 +24,9 @@ const _ol = document.createElement('canvas');
 function outlined(person, color, r) {
   if (_ol.width !== person.width || _ol.height !== person.height) { _ol.width = person.width; _ol.height = person.height; }
   const c = _ol.getContext('2d'); c.clearRect(0, 0, _ol.width, _ol.height);
-  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; c.drawImage(person, Math.cos(a) * r, Math.sin(a) * r); }
+  // 外圈 32 個方向＋內圈 16 個方向，描邊才會圓順、不會有缺口
+  for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; c.drawImage(person, Math.cos(a) * r, Math.sin(a) * r); }
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2 + .1; c.drawImage(person, Math.cos(a) * r * .5, Math.sin(a) * r * .5); }
   c.globalCompositeOperation = 'source-in'; c.fillStyle = color; c.fillRect(0, 0, _ol.width, _ol.height);
   c.globalCompositeOperation = 'source-over'; c.drawImage(person, 0, 0);
   return _ol;
@@ -338,10 +340,10 @@ export const STYLE_EFFECTS = {
   // 11 剪報拼貼風
   clippingCollage: {
     name: '剪報拼貼', icon: '✂️', cat: '剪輯風格', color: '#D4A373', dur: 3.5, ai: P => P.outline === 'on',
-    params: { title: T('標題（每個字一張紙片）', '這很重要'), outline: S('人物白色描邊', 'on', ON_OFF), y: R('垂直位置', .16, .05, .8) },
+    params: { tip: { type: 'note', label: '人物邊緣不準？到「🎨 調色 → AI 去背精準度」切換「高品質」模型，並用「邊緣」滑桿微調。' }, title: T('標題（每個字一張紙片）', '這很重要'), outline: S('人物白色描邊', 'on', ON_OFF), outlineW: R('描邊粗細', 10, 4, 24, 1), y: R('垂直位置', .16, .05, .8) },
     draw(e) {
       const { ctx, W, H, P, lt, outK } = e, k = W / 1080;
-      if (P.outline === 'on') { const p = e.person(); if (p) { ctx.save(); ctx.globalAlpha = outK; ctx.drawImage(outlined(p, '#fff', 10 * k), 0, 0); ctx.restore(); } }
+      if (P.outline === 'on') { const p = e.person(); if (p) { ctx.save(); ctx.globalAlpha = outK; ctx.drawImage(outlined(p, '#fff', P.outlineW * k), 0, 0); ctx.restore(); } }
       const chars = [...String(P.title || '')].filter(c => c.trim()); if (!chars.length) return;
       const bgs = ['#FFFFFF', '#111111', '#FFB6C8', '#C8A27A'], fgs = ['#111', '#fff', '#111', '#2B1B0E'];
       const fams = [SERIF, SANS, '"Archivo Black",' + SANS, '"Playfair Display",' + SERIF, MARKER];
@@ -459,7 +461,9 @@ export const STYLE_EFFECTS = {
   colorOutline: {
     name: '彩色描邊／換背景', icon: '🟢', cat: '剪輯風格', color: '#68D391', dur: 3, base: true, ai: () => true,
     params: {
+      tip: { type: 'note', label: '人物邊緣不準？到「🎨 調色 → AI 去背精準度」切換「高品質」模型，並用「邊緣」滑桿微調。' },
       text: T('字幕', '這招真的很好用'),
+      outlineW: R('描邊粗細', 12, 4, 28, 1),
       color: S('描邊顏色', 'cycle', [['cycle', '粉綠藍輪替'], ['#FF7FB0', '粉'], ['#5EE38A', '綠'], ['#5DB7FF', '藍'], ['none', '不描邊']]),
       bg: S('背景', 'dots', [['dots', '點點'], ['solid', '純色'], ['image', '自訂圖片'], ['blur', '原畫面模糊']]),
       bgImage: IMG('自訂背景圖（上傳後自動套用）', { autoSet: { bg: 'image' } }),
@@ -475,7 +479,7 @@ export const STYLE_EFFECTS = {
       else if (P.bg === 'blur' || P.bg === 'image') ctx.drawImage(blurred(frame, 18), 0, 0, W, H);
       else if (P.bg === 'dots') { ctx.fillStyle = 'rgba(0,0,0,.08)'; for (let y = 0; y < H; y += 46 * k) for (let x = (y / (46 * k)) % 2 ? 23 * k : 0; x < W; x += 46 * k) { ctx.beginPath(); ctx.arc(x, y, 7 * k, 0, 7); ctx.fill(); } }
       const p = e.person();
-      if (p) { shadow(ctx, 24 * k, 'rgba(0,0,0,.2)', 8 * k); ctx.drawImage(col === 'none' ? p : outlined(p, col, 12 * k), 0, 0); noShadow(ctx); } else ctx.drawImage(frame, 0, 0);
+      if (p) { shadow(ctx, 24 * k, 'rgba(0,0,0,.2)', 8 * k); ctx.drawImage(col === 'none' ? p : outlined(p, col, P.outlineW * k), 0, 0); noShadow(ctx); } else ctx.drawImage(frame, 0, 0);
       if (P.sub === 'on') caption(ctx, e, P.text, { px: P.size, weight: 900, y: P.y, bar: col === 'none' ? 'rgba(0,0,0,.6)' : col, barR: 40 * k, color: col === 'none' ? '#fff' : '#111' });
     },
   },

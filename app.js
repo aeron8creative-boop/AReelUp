@@ -403,6 +403,7 @@ function fieldFor(fx, k, d) {
   const wrap = document.createElement('div'); wrap.className = 'field';
   const set = v => { fx.params[k] = v; state.segDirty = true; save(); loadFonts(fx); };
   const v = fx.params[k];
+  if (d.type === 'note') { wrap.innerHTML = `<p class="note" style="background:var(--panel2);padding:10px 12px;border-radius:10px;margin:0">💡 ${d.label}</p>`; return wrap; }
   if (d.type === 'text' || d.type === 'textarea') {
     wrap.innerHTML = `<label>${d.label}</label>` + (d.type === 'text' ? `<input type="text">` : `<textarea></textarea>`);
     const inp = wrap.querySelector('input,textarea'); inp.value = v; inp.addEventListener('input', () => set(inp.value));
