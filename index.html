@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e0e11">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>A ReelUp — 手機特效剪片</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bodoni+Moda:wght@700&family=Caveat:wght@700&family=DM+Serif+Display:ital@0;1&family=Inter:wght@500;600;700;800&family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@500;600;700;900&family=Noto+Serif+TC:wght@700;900&family=Permanent+Marker&family=Playfair+Display:ital,wght@1,700&family=Space+Mono:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">A Reel<span>Up</span></div>
+    <div class="top-actions">
+      <label class="btn ghost" id="replaceBtn" hidden>換影片<input type="file" accept="video/*" id="fileInput2" hidden></label>
+      <button class="btn primary" id="exportBtn" disabled>匯出</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="view" width="1080" height="1920"></canvas>
+      <div class="safe-zone" id="safeZone" hidden><i class="t"></i><i class="b"></i></div>
+      <div class="empty" id="empty">
+        <div class="empty-icon">🎬</div>
+        <h1>把影片變成爆款 Reels</h1>
+        <p>上傳一段直式影片，加上去背大標、影片牆、破框而出等特效，直接匯出。</p>
+        <label class="btn primary big">選擇影片<input type="file" accept="video/*" id="fileInput" hidden></label>
+        <p class="hint">影片只在你的手機上處理，不會上傳</p>
+      </div>
+      <div class="status" id="status" hidden></div>
+    </div>
+  </main>
+
+  <section class="controls" id="controls" hidden>
+    <div class="transport">
+      <button class="icon-btn" id="playBtn" aria-label="播放">▶</button>
+      <span class="time" id="timeLabel">0:00.0 / 0:00.0</span>
+      <button class="icon-btn small" id="muteBtn" aria-label="靜音">🔊</button>
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="track" id="track">
+        <div class="ruler" id="ruler"></div>
+        <div class="lanes" id="lanes"></div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+    <div class="bottombar">
+      <button class="btn add" id="addBtn">＋ 加特效</button>
+      <button class="btn ghost tool" id="cutBtn">✂️<small>剪輯</small></button>
+      <button class="btn ghost tool" id="subBtn">💬<small>字幕</small></button>
+      <button class="btn ghost tool" id="setBtn">🎨<small>調色</small></button>
+    </div>
+  </section>
+</div>
+
+<!-- 特效選單 -->
+<div class="sheet-backdrop" id="backdrop" hidden></div>
+<div class="sheet" id="addSheet" aria-hidden="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><h2>選擇特效</h2><button class="icon-btn small close" data-close>✕</button></div>
+  <div class="sheet-body" id="effectGrid"></div>
+</div>
+
+<!-- 特效編輯 -->
+<div class="sheet" id="editSheet" aria-hidden="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><h2 id="editTitle">編輯</h2><button class="icon-btn small close" data-close>✕</button></div>
+  <div class="sheet-body" id="editBody"></div>
+</div>
+
+<!-- 調色 / 設定 -->
+<div class="sheet" id="settingsSheet" aria-hidden="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><h2>🎨 調色與設定</h2><button class="icon-btn small close" data-close>✕</button></div>
+  <div class="sheet-body" id="settingsBody"></div>
+</div>
+
+<!-- 語音辨識 / 剪氣口 -->
+<div class="sheet" id="trSheet" aria-hidden="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><h2>✂️ 語音剪輯</h2><button class="icon-btn small close" data-close>✕</button></div>
+  <div class="sheet-body" id="trBody"></div>
+</div>
+
+<!-- 批次字幕 -->
+<div class="sheet" id="batchSheet" aria-hidden="true">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><h2>💬 批次加字幕</h2><button class="icon-btn small close" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>一行一句，中英文用「/」分開；用 *星號* 標出品牌色重點</label>
+      <textarea id="batchText" rows="6" placeholder="今天教你用 *AI* 剪片 / Edit your reels with *AI*&#10;只要三個步驟 / Just three steps&#10;馬上試試看 / Try it now"></textarea></div>
+    <div class="field"><label>每句長度 <b id="batchDurLabel">2.0s</b></label><input type="range" id="batchDur" min=".8" max="5" step=".1" value="2"></div>
+    <p class="hint" style="font-size:12px;color:var(--muted)">從目前播放頭開始依序排列，樣式會沿用你上一次調整的字幕。</p>
+    <div class="row-actions"><button class="btn primary" id="batchGo">加入字幕</button></div>
+  </div>
+</div>
+
+<!-- 匯出 -->
+<div class="modal" id="exportModal" hidden>
+  <div class="modal-card">
+    <h2 id="exportTitle">匯出中…</h2>
+    <div class="progress"><div id="exportBar"></div></div>
+    <p class="hint" id="exportHint">請保持此頁面開啟，不要切換 App</p>
+    <div class="modal-actions" id="exportActions">
+      <button class="btn ghost" id="cancelExport">取消</button>
+    </div>
+  </div>
+</div>
+
+<video id="video" playsinline webkit-playsinline preload="auto"></video>
+<script type="module" src="app.js"></script>
+</body>
+</html>
