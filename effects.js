@@ -54,6 +54,14 @@ const words = s => String(s || '').trim().split(/\s+/).filter(Boolean);
 const lum = hex => { const n = parseInt(String(hex).slice(1), 16); return ((n >> 16 & 255) * .299 + (n >> 8 & 255) * .587 + (n & 255) * .114) / 255; };
 // "今天教你用 *AI* 剪片" → [{t:'今天教你用 ',b:false},{t:'AI',b:true},{t:' 剪片',b:false}]
 const parseMarks = s => String(s || '').split(/\*([^*]+)\*/).map((t, i) => ({ t, b: i % 2 === 1 })).filter(x => x.t);
+// 字幕安全區：上方 240px、下方 420px（以 1080×1920 為基準）不放字。回傳調整後的中心 y
+function safeY(e, cy, h) {
+  if (e.subSafe === false) return cy;
+  const k = e.W / 1080, top = 240 * k, bot = e.H - 420 * k;
+  if (h >= bot - top) return (top + bot) / 2;
+  return clamp(cy, top + h / 2, bot - h / 2);
+}
+const subK = e => e.subScale || 1; // 字幕整體大小
 const fmtNum = n => Math.round(n).toLocaleString('en-US');
 
 // 便宜又 Safari 相容的模糊：先縮小再放大
@@ -99,7 +107,7 @@ export const EFFECTS = {
     draw(e) {
       const { ctx, W, H, P, lt, outK } = e;
       const ws = words(P.text); if (!ws.length) return;
-      const px = P.size * W;
+      const px = P.size * W * subK(e);
       ctx.font = font(P.fontKey, px);
       const space = px * .28, maxW = W * .88;
       // 斷行
@@ -110,7 +118,7 @@ export const EFFECTS = {
         rows[rows.length - 1].push({ w, ww, i }); rowW += ww + space;
       });
       const step = Math.min(.28, (e.dur * .6) / ws.length);
-      const lh = px * 1.1, y0 = P.y * H - (rows.length - 1) * lh / 2;
+      const lh = px * 1.1, y0 = safeY(e, P.y * H, rows.length * lh) - (rows.length - 1) * lh / 2;
       ctx.textBaseline = 'middle';
       rows.forEach((row, ri) => {
         const total = row.reduce((s, o) => s + o.ww, 0) + space * (row.length - 1);
@@ -202,14 +210,14 @@ export const EFFECTS = {
       boxOpacity: R('襯底不透明度（預設 40%）', .4, 0, 1),
       shadow: S('文字陰影', 'on', [['on', '開'], ['off', '關']]),
       brandStyle: S('品牌色區塊', 'text', [['text', '重點字變色'], ['box', '重點字底色'], ['bar', '英文整條品牌色'], ['none', '不使用']]),
-      y: R('垂直位置', .8, .1, .93),
+      y: R('垂直位置', .74, .1, .93),
     },
     draw(e) {
       const { ctx, W, H, P, lt, outK } = e;
       const brand = e.brand || '#F5A623';
       const rows = [];
-      const zh = { segs: parseMarks(P.zh), key: 'zhSerif', px: P.zhSize * W, lang: 'zh' };
-      const en = { segs: parseMarks(P.en), key: 'enSans', px: P.enSize * W, lang: 'en' };
+      const zh = { segs: parseMarks(P.zh), key: 'zhSerif', px: P.zhSize * W * subK(e), lang: 'zh' };
+      const en = { segs: parseMarks(P.en), key: 'enSans', px: P.enSize * W * subK(e), lang: 'en' };
       (P.order === 'en' ? [en, zh] : [zh, en]).forEach(r => r.segs.length && rows.push(r));
       if (!rows.length) return;
       const padX = W * .04, padY = W * .022, gap = W * .014, maxW = W * .92 - padX * 2;
@@ -223,7 +231,7 @@ export const EFFECTS = {
       const bw = Math.max(...rows.map(r => r.w)) + padX * 2;
       const bh = rows.reduce((s, r) => s + r.h, 0) + gap * (rows.length - 1) + padY * 2;
       const a = clamp(lt / .18) * outK, rise = (1 - easeOut(lt / .25)) * W * .02;
-      const x0 = (W - bw) / 2, y0 = P.y * H - bh / 2 + rise;
+      const x0 = (W - bw) / 2, y0 = safeY(e, P.y * H, bh) - bh / 2 + rise;
       ctx.save(); ctx.globalAlpha = a;
       if (P.box === 'on' && P.boxOpacity > 0) {
         ctx.fillStyle = `rgba(0,0,0,${P.boxOpacity})`; rr(ctx, x0, y0, bw, bh, W * .02); ctx.fill();
@@ -682,4 +690,4 @@ export function defaultParams(type) {
 export function needsMask(fx) { const d = EFFECTS[fx.type]; return !!(d.ai && d.ai(fx.params)); }
 
 // 給其他特效模組共用
-export { clamp, easeOut, easeInOut, easeBack, lerp, rand, rr, drawCover, fitFont, lines, words, fmtNum, lum, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, IMGS, MEDIA };
+export { safeY, subK, clamp, easeOut, easeInOut, easeBack, lerp, rand, rr, drawCover, fitFont, lines, words, fmtNum, lum, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, IMGS, MEDIA };

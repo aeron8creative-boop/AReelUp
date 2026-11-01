@@ -1,6 +1,6 @@
 // ───────────────── 20 種剪輯風格 ─────────────────
 // 依照「20 個剪輯風格 Skill」規格改寫成即時 canvas 特效（基準 1080×1920，k = W/1080）。
-import { FONTS, clamp, easeOut, easeInOut, lerp, rand, rr, drawCover, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, MEDIA } from './effects.js';
+import { safeY, subK, FONTS, clamp, easeOut, easeInOut, lerp, rand, rr, drawCover, parseMarks, blurred, shadow, noShadow, T, TA, C, S, R, IMG, MEDIA } from './effects.js';
 import { ready, enter, fitF, wrap, tmp, F, SANS, INTER, SERIF, MARKER } from './effects-pro.js';
 
 const WENKAI = FONTS.wenkai, BODONI = FONTS.bodoni, VT = FONTS.vt323;
@@ -58,10 +58,10 @@ function sparkle(ctx, x, y, s, color) {
 function caption(ctx, e, text, opt) {
   const { W, lt, outK } = e, k = W / 1080;
   const segs = parseMarks(text); if (!segs.length) return;
-  const px = opt.px * k; ctx.font = F(opt.weight || 700, px, opt.fam || SANS);
+  const px = opt.px * k * subK(e); ctx.font = F(opt.weight || 700, px, opt.fam || SANS);
   let ms = measureSegs(ctx, segs); let tw = ms.reduce((a, g) => a + g.w, 0);
   if (tw > W * .86) { const s = W * .86 / tw; ctx.font = F(opt.weight || 700, px * s, opt.fam || SANS); ms = measureSegs(ctx, segs); tw = W * .86; }
-  const y = opt.y * e.H;
+  const y = safeY(e, opt.y * e.H, px * 1.6);
   ctx.save(); ctx.globalAlpha *= outK; enter(ctx, lt, opt.delay || 0, k, opt.d || .42);
   if (opt.bar) { ctx.fillStyle = opt.bar; rr(ctx, W / 2 - tw / 2 - 24 * k, y - px * .78, tw + 48 * k, px * 1.56, opt.barR ?? 10 * k); ctx.fill(); }
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
@@ -220,7 +220,7 @@ export const STYLE_EFFECTS = {
   // 06 復古膠片風
   filmGrain: {
     name: '復古膠片', icon: '🎞️', cat: '剪輯風格', color: '#F6AD55', dur: 4,
-    params: { line: T('手寫旁白', '那年夏天，我們都還很年輕'), date: T('日期戳', "'26 11 01"), grainAmt: R('顆粒', .35, 0, .8) },
+    params: { line: T('手寫旁白', '那年夏天，我們都還很年輕'), lineSize: R('旁白字體大小', 54, 32, 90, 1), date: T('日期戳', "'26 11 01"), grainAmt: R('顆粒', .35, 0, .8) },
     draw(e) {
       const { ctx, W, H, P, lt, outK } = e, k = W / 1080;
       ctx.save(); ctx.globalAlpha = outK;
@@ -234,7 +234,7 @@ export const STYLE_EFFECTS = {
       ctx.fillStyle = '#E8E2D6'; for (let y = -90 * k + off; y < H; y += 90 * k) { rr(ctx, 20 * k, y, 30 * k, 44 * k, 6 * k); ctx.fill(); rr(ctx, W - 50 * k, y, 30 * k, 44 * k, 6 * k); ctx.fill(); }
       ctx.font = F(400, 64 * k, VT); ctx.fillStyle = '#FF8A2A'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; shadow(ctx, 14 * k, 'rgba(255,120,30,.9)', 0); ctx.fillText(P.date, W - bw - 40 * k, H - 470 * k); noShadow(ctx);
       ctx.restore();
-      if (P.line) caption(ctx, e, P.line, { px: 54, fam: WENKAI, weight: 700, y: .7, shadow: true, delay: .2 });
+      if (P.line) caption(ctx, e, P.line, { px: P.lineSize, fam: WENKAI, weight: 700, y: .7, shadow: true, delay: .2 });
     },
   },
 
@@ -246,11 +246,12 @@ export const STYLE_EFFECTS = {
       const { ctx, W, H, P, lt, outK } = e, k = W / 1080;
       if (P.chapter) { ctx.save(); ctx.globalAlpha *= outK * easeOut(lt / .3); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = F(500, 28 * k, INTER); ctx.textBaseline = 'top'; spaced(ctx, P.chapter + ' /', 70 * k, 260 * k, 4 * k, 'left'); ctx.restore(); }
       const segs = parseMarks(P.text); if (!segs.length) return;
-      ctx.save(); ctx.globalAlpha *= outK * easeOut(lt / .3); ctx.font = F(500, P.size * k, SANS); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
-      shadow(ctx, 6 * k, 'rgba(0,0,0,.18)', 1); const sp = P.size * k * .05;
+      ctx.save(); ctx.globalAlpha *= outK * easeOut(lt / .3); const fs = P.size * k * subK(e); ctx.font = F(500, fs, SANS); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+      shadow(ctx, 6 * k, 'rgba(0,0,0,.18)', 1); const sp = fs * .05;
       const widths = segs.map(g => [...g.t].reduce((a, c) => a + ctx.measureText(c).width + sp, 0));
-      let x = W / 2 - widths.reduce((a, b) => a + b, 0) / 2; const y = P.y * H;
-      segs.forEach((g, i) => { spaced(ctx, g.t, x, y, sp, 'left'); if (g.b) { noShadow(ctx); ctx.fillRect(x, y + P.size * k * .7, widths[i] - sp, Math.max(1, 2 * k)); shadow(ctx, 6 * k, 'rgba(0,0,0,.18)', 1); } x += widths[i]; });
+      let tot = widths.reduce((a, b) => a + b, 0); if (tot > W * .86) { const sc = W * .86 / tot; ctx.font = F(500, fs * sc, SANS); for (let i = 0; i < widths.length; i++) widths[i] *= sc; tot = W * .86; }
+      let x = W / 2 - tot / 2; const y = safeY(e, P.y * H, fs * 1.6);
+      segs.forEach((g, i) => { spaced(ctx, g.t, x, y, sp, 'left'); if (g.b) { noShadow(ctx); ctx.fillRect(x, y + fs * .7, widths[i] - sp, Math.max(1, 2 * k)); shadow(ctx, 6 * k, 'rgba(0,0,0,.18)', 1); } x += widths[i]; });
       ctx.restore();
     },
   },
@@ -263,12 +264,14 @@ export const STYLE_EFFECTS = {
       const { ctx, W, H, P, lt, outK } = e, k = W / 1080;
       const chars = [...String(P.text || '')]; if (!chars.length) return;
       const rows = []; for (let i = 0; i < chars.length; i += 12) rows.push(chars.slice(i, i + 12));
-      const px = P.size * k, prog = clamp((lt - .15) / Math.max(.3, e.dur - .5)) * chars.length; // 平均分配（之後可接逐字稿時間碼）
+      let px = P.size * k * subK(e);
+      { ctx.font = F(900, px, SANS); const widest = Math.max(...rows.map(r => r.reduce((a, c) => a + ctx.measureText(c).width, 0))) + px * .8; if (widest > W * .86) px *= W * .86 / widest; } // 不超出左右邊
+      const prog = clamp((lt - .15) / Math.max(.3, e.dur - .5)) * chars.length; // 平均分配（之後可接逐字稿時間碼）
       ctx.save(); ctx.globalAlpha *= outK; enter(ctx, lt, 0, k); ctx.font = F(900, px, SANS); ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
       let idx = 0;
       rows.forEach((row, ri) => {
         const ws = row.map(c => ctx.measureText(c).width), tw = ws.reduce((a, b) => a + b, 0);
-        let x = W / 2 - tw / 2; const y = P.y * H + (ri - (rows.length - 1) / 2) * px * 1.3;
+        let x = W / 2 - tw / 2; const y = safeY(e, P.y * H, rows.length * px * 1.3) + (ri - (rows.length - 1) / 2) * px * 1.3;
         if (ri === 0) { ctx.fillStyle = P.color; ctx.font = F(900, px * .7, SANS); ctx.lineWidth = 4 * k; ctx.strokeStyle = '#000'; ctx.strokeText('♪', x - px * .8, y); ctx.fillText('♪', x - px * .8, y); ctx.font = F(900, px, SANS); }
         row.forEach((c, i) => {
           ctx.lineWidth = 8 * k; ctx.strokeStyle = '#000'; ctx.strokeText(c, x, y); // 4px 描邊（雙側）
@@ -386,7 +389,7 @@ export const STYLE_EFFECTS = {
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, b * bk); ctx.fillRect(0, H - b * bk, W, b * bk);
       if (P.fade === 'on') { const f = Math.max(1 - clamp(lt / .6), 1 - clamp((dur - lt) / .6)); if (f > 0) { ctx.fillStyle = `rgba(0,0,0,${f})`; ctx.fillRect(0, 0, W, H); } }
       if (P.title && lt < 2.6) { ctx.save(); ctx.globalAlpha = easeOut((lt - .3) / .5) * clamp((2.6 - lt) / .5); ctx.fillStyle = '#fff'; ctx.font = F(400, 96 * k, '"DM Serif Display",' + SERIF); ctx.textBaseline = 'middle'; spaced(ctx, P.title.toUpperCase(), W / 2, H * .45, 22 * k); ctx.restore(); }
-      if (P.sub) { ctx.save(); ctx.globalAlpha = easeOut((lt - .4) / .4) * e.outK; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; fitF(ctx, P.sub, 400, SANS, W * .86, 38 * k); ctx.fillText(P.sub, W / 2, H - b / 2); ctx.restore(); }
+      if (P.sub) { ctx.save(); ctx.globalAlpha = easeOut((lt - .4) / .4) * e.outK; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const fs = fitF(ctx, P.sub, 400, SANS, W * .86, 38 * k * subK(e)); ctx.fillText(P.sub, W / 2, safeY(e, H - b / 2, fs * 1.6)); ctx.restore(); }
     },
   },
 
@@ -417,10 +420,10 @@ export const STYLE_EFFECTS = {
     draw(e) {
       const { ctx, W, H, P, lt, outK } = e, k = W / 1080;
       const segs = parseMarks(P.text); if (!segs.length) return;
-      const px = P.size * k; ctx.font = F(700, px, WENKAI);
+      const px = P.size * k * subK(e); ctx.font = F(700, px, WENKAI);
       let ms = measureSegs(ctx, segs), tw = ms.reduce((a, g) => a + g.w, 0);
       if (tw > W * .8) { ctx.font = F(700, px * W * .8 / tw, WENKAI); ms = measureSegs(ctx, segs); tw = W * .8; }
-      const y = P.y * H, nw = tw + 90 * k, nh = px * 2.1, nx = W / 2 - nw / 2;
+      const nh0 = px * 2.1, y = safeY(e, P.y * H, nh0 + 40 * k), nw = tw + 90 * k, nh = nh0, nx = W / 2 - nw / 2;
       ctx.save(); ctx.globalAlpha *= outK; enter(ctx, lt, 0, k);
       ctx.save(); ctx.translate(W / 2, y); ctx.rotate(-.012); shadow(ctx, 16 * k, 'rgba(0,0,0,.25)', 5 * k); ctx.fillStyle = '#F7EEDC'; ctx.fillRect(-nw / 2, -nh / 2, nw, nh); ctx.restore();
       let x = W / 2 - tw / 2; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
@@ -442,13 +445,13 @@ export const STYLE_EFFECTS = {
   // 16 黑白高反差風
   monoContrast: {
     name: '黑白高反差', icon: '⚫', cat: '剪輯風格', color: '#A0AEC0', dur: 2.5, base: true,
-    params: { text: T('字幕（*星號* = 彩色重點）', '只有*你*能決定'), mark: C('重點色', '#D2603A', ['#D2603A', '#FF5C8A', '#F5A623', '#E53935']), y: R('垂直位置', .78, .2, .9) },
+    params: { text: T('字幕（*星號* = 彩色重點）', '只有*你*能決定'), mark: C('重點色', '#D2603A', ['#D2603A', '#FF5C8A', '#F5A623', '#E53935']), y: R('垂直位置', .74, .2, .9), size: R('字體大小', 58, 36, 96, 1) },
     draw(e) {
       const { ctx, W, H, P, frame } = e;
       ctx.drawImage(frame, 0, 0); mono(ctx, W, H);
       ctx.save(); ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = .35; ctx.drawImage(ctx.canvas, 0, 0); ctx.restore(); // 對比約 1.25
       mono(ctx, W, H);
-      caption(ctx, e, P.text, { px: 58, weight: 900, y: P.y, bar: 'rgba(0,0,0,.85)', barR: 0, mark: P.mark });
+      caption(ctx, e, P.text, { px: P.size, weight: 900, y: P.y, bar: 'rgba(0,0,0,.85)', barR: 0, mark: P.mark });
     },
   },
 
@@ -462,6 +465,7 @@ export const STYLE_EFFECTS = {
       bgImage: IMG('自訂背景圖（上傳後自動套用）', { autoSet: { bg: 'image' } }),
       bgColor: C('背景色', '#FFF4D6', ['#FFF4D6', '#E9E4FF', '#DFF7EA', '#111111']),
       sub: S('字幕膠囊', 'on', ON_OFF),
+      size: R('字幕大小', 52, 32, 90, 1), y: R('字幕垂直位置', .74, .2, .9),
     },
     draw(e) {
       const { ctx, W, H, P, lt, frame } = e, k = W / 1080;
@@ -472,7 +476,7 @@ export const STYLE_EFFECTS = {
       else if (P.bg === 'dots') { ctx.fillStyle = 'rgba(0,0,0,.08)'; for (let y = 0; y < H; y += 46 * k) for (let x = (y / (46 * k)) % 2 ? 23 * k : 0; x < W; x += 46 * k) { ctx.beginPath(); ctx.arc(x, y, 7 * k, 0, 7); ctx.fill(); } }
       const p = e.person();
       if (p) { shadow(ctx, 24 * k, 'rgba(0,0,0,.2)', 8 * k); ctx.drawImage(col === 'none' ? p : outlined(p, col, 12 * k), 0, 0); noShadow(ctx); } else ctx.drawImage(frame, 0, 0);
-      if (P.sub === 'on') caption(ctx, e, P.text, { px: 52, weight: 900, y: .8, bar: col === 'none' ? 'rgba(0,0,0,.6)' : col, barR: 40 * k, color: col === 'none' ? '#fff' : '#111' });
+      if (P.sub === 'on') caption(ctx, e, P.text, { px: P.size, weight: 900, y: P.y, bar: col === 'none' ? 'rgba(0,0,0,.6)' : col, barR: 40 * k, color: col === 'none' ? '#fff' : '#111' });
     },
   },
 

@@ -14,7 +14,7 @@ const video = $('#video');
 const frame = mk(W, H), personCv = mk(W, H);
 function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
-const DEFAULT_SETTINGS = { speech: { ...SP.DEFAULT_SPEECH }, grade: 'warmCinema', gradeAmt: .7, letterbox: 'off', brand: '#F5A623', segQuality: 'fast', edge: 0, soft: .2, smooth: .45, res: 1080, safe: 'off' };
+const DEFAULT_SETTINGS = { speech: { ...SP.DEFAULT_SPEECH }, grade: 'warmCinema', gradeAmt: .7, letterbox: 'off', brand: '#F5A623', segQuality: 'fast', edge: 0, soft: .2, smooth: .45, res: 1080, safe: 'off', subScale: 1, subSafe: 'on' };
 const settings = { ...DEFAULT_SETTINGS };
 const KEY = 'clipfx.project.v1';
 try { const raw = JSON.parse(localStorage.getItem(KEY) || '{}'); if (raw && raw.settings) Object.assign(settings, raw.settings); } catch {}
@@ -134,7 +134,7 @@ function render() {
   }
   let personDone = false;
   const env = {
-    ctx, W, H, frame, brand: settings.brand, bbox: seg.state === 'ready' ? seg.bbox : null,
+    ctx, W, H, frame, brand: settings.brand, subScale: settings.subScale || 1, subSafe: settings.subSafe !== 'off', bbox: seg.state === 'ready' ? seg.bbox : null,
     person() {
       if (!wantMask || seg.state !== 'ready') return null;
       if (!personDone) { seg.cutout(frame, personCv); personDone = true; }
@@ -353,9 +353,16 @@ function applyTemplate() {
 }
 
 // ───────────── 編輯特效 ─────────────
+const SUB_TYPES = new Set(['subtitle', 'caption', 'minimalWhite', 'karaoke', 'handwrittenNote', 'monoContrast', 'colorOutline', 'filmGrain', 'cinemascope']);
+function updateSafeZone() {
+  const fx = state.effects.find(f => f.id === state.selected);
+  const editingSub = fx && SUB_TYPES.has(fx.type) && document.body.classList.contains('editing');
+  $('#safeZone').hidden = !(settings.safe === 'on' || editingSub);
+}
 function selectFx(id, open) {
   state.selected = id; renderTimeline();
   if (open && id) { renderEdit(); openSheet('edit'); }
+  updateSafeZone();
 }
 
 function renderEdit() {
@@ -509,6 +516,12 @@ function renderSettings() {
       <button data-v="off" class="${settings.safe === 'off' ? 'on' : ''}">關</button><button data-v="on" class="${settings.safe === 'on' ? 'on' : ''}">開</button></div></div>
     <p class="note">重要文字放在上方 240px 以下、底部 420px 以上，避開 IG / TikTok 的按鈕。</p>
 
+    <div class="section-title">字幕</div>
+    <div class="field"><label>字幕整體大小 <b id="ssL">${Math.round((settings.subScale || 1) * 100)}%</b></label><input type="range" min=".6" max="1.6" step=".05" value="${settings.subScale || 1}" id="subScale"></div>
+    <div class="field"><label>字幕自動避開安全區</label><div class="seg" id="subSafeSeg">
+      <button data-v="on" class="${settings.subSafe !== 'off' ? 'on' : ''}">開（建議）</button><button data-v="off" class="${settings.subSafe === 'off' ? 'on' : ''}">關</button></div></div>
+    <p class="note">開啟時，字幕放太上面或太下面會自動移回安全範圍內；字太長也會自動縮小，不會超出左右邊。</p>
+
     <div class="section-title">AI 去背精準度</div>
     <div class="field"><label>模型</label><div class="seg" id="sq">
       <button data-v="fast" class="${settings.segQuality === 'fast' ? 'on' : ''}">快速</button>
@@ -546,6 +559,8 @@ function renderSettings() {
   $('#brollInput').onchange = async e => { const f = e.target.files[0]; if (!f) return; $('#brollName').textContent = '讀取中…'; await loadBroll(f); renderSettings(); };
   $('#resSeg').onclick = e => { const v = +e.target.dataset.v; if (!v) return; settings.res = v; setResolution(v); $('#resSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.v === v)); save(); };
   $('#safeSeg').onclick = e => { const v = e.target.dataset.v; if (!v) return; settings.safe = v; $('#safeZone').hidden = v !== 'on'; $('#safeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); save(); };
+  $('#subScale').oninput = e => { settings.subScale = +e.target.value; $('#ssL').textContent = Math.round(settings.subScale * 100) + '%'; save(); };
+  $('#subSafeSeg').onclick = e => { const v = e.target.dataset.v; if (!v) return; settings.subSafe = v; $('#subSafeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); save(); };
   $('#segReset').onclick = () => { Object.assign(settings, { segQuality: settings.segQuality, edge: 0, soft: .2, smooth: .45 }); commit(); renderSettings(); };
 }
 
@@ -741,6 +756,7 @@ function renderTr() {
       </details>`;
     if (tr.words?.length) {
       h += `<div class="field"><label>產生字幕樣式</label>${seg('subStyle', trUI.subStyle, TR_SUB_STYLES)}</div>
+        <div class="field"><label>字幕整體大小 <b>${Math.round((settings.subScale || 1) * 100)}%</b></label><input type="range" min=".6" max="1.6" step=".05" value="${settings.subScale || 1}" data-sub-scale></div>
         <div class="row-actions" style="margin-top:4px"><button class="btn primary" data-act="subs">💬 產生字幕</button><button class="btn ghost" data-act="srt">⬇ 匯出 SRT</button></div>`;
     }
     h += `<div class="legend"><span style="--c:#ff7b7b">已剪掉（點一下還原）</span><span style="--c:#f6ad55">語氣詞</span><span style="--c:#b794f4">重複</span><span style="--c:#666">⏸ 氣口</span></div>
@@ -833,6 +849,8 @@ $('#trBody').addEventListener('input', e => {
     clearTimeout(trUI.deb); trUI.deb = setTimeout(() => { applyRules(); renderTr(); }, 250);
   } else if (t.dataset.text === 'fillers') {
     o.fillers = t.value; clearTimeout(trUI.deb); trUI.deb = setTimeout(() => { applyRules(); renderTr(); }, 600);
+  } else if (t.dataset.subScale != null) {
+    settings.subScale = +t.value; t.previousElementSibling.querySelector('b').textContent = Math.round(settings.subScale * 100) + '%'; save();
   } else if (t.dataset.sentText != null) {
     state.tr.sents[+t.dataset.k].text = t.value; save();
   }
@@ -851,6 +869,7 @@ function closeSheets(clearSel = true) {
   document.querySelectorAll('.sheet').forEach(s => { s.classList.remove('open'); s.setAttribute('aria-hidden', 'true'); });
   $('#backdrop').hidden = true; document.body.classList.remove('editing');
   if (clearSel && state.selected) { state.selected = null; renderTimeline(); }
+  updateSafeZone();
 }
 $('#backdrop').onclick = () => closeSheets();
 document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => closeSheets());
